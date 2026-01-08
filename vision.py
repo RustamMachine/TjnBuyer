@@ -22,7 +22,7 @@ def is_reroll_active():
 
 def scan_inventory_batch():
     if config.DEBUG_MODE:
-        print(f"\n{Fore.CYAN}--- SCAN START (V8 Guarded + Sum Check) ---{Style.RESET_ALL}")
+        print(f"\n{Fore.CYAN}--- SCAN START (V9 Absolute Sat Check) ---{Style.RESET_ALL}")
     
     found_items = []
     half_size = config.ANALYSIS_BOX_SIZE // 2
@@ -52,24 +52,29 @@ def scan_inventory_batch():
             saturation_map = np.ptp(img[:, :, :3], axis=2)
             avg_saturation = np.mean(saturation_map)
             
-            # === ЛОГИКА V8 (GUARDED) ===
+            # === ЛОГИКА V9 (ABSOLUTE SAT CHECK) ===
             
-            # 1. Защита от пустоты
+            # 1. Защита от пустоты (Пол)
             is_valid_floor = avg_brightness > config.MIN_ABSOLUTE_BRIGHTNESS
+
+            # 2. Глобальная защита от бликов (Абсолютная насыщенность)
+            # Если насыщенность ниже порога, предмет игнорируется ПОЛНОСТЬЮ,
+            # даже если проходит по сумме или яркости.
+            is_valid_global_sat = avg_saturation > config.MIN_SATURATION_FOR_BRIGHT_TRIGGER
             
-            # 2. Trigger 1: Чистый цвет
+            # 3. Trigger 1: Чистый цвет
             trigger_sat = avg_saturation > config.MIN_SATURATION_TRIGGER
             
-            # 3. Trigger 2: Яркость + Минимальный цвет
-            # Предмет должен быть ярким И иметь хоть немного цвета (защита от бликов S=0..5)
-            trigger_bright = (avg_brightness > config.MIN_BRIGHTNESS_TRIGGER) and \
-                             (avg_saturation > config.MIN_SATURATION_FOR_BRIGHT_TRIGGER)
+            # 4. Trigger 2: Яркость
+            # (Доп. проверка насыщенности здесь убрана, т.к. есть is_valid_global_sat)
+            trigger_bright = avg_brightness > config.MIN_BRIGHTNESS_TRIGGER
             
-            # 4. Trigger 3: Финальная проверка суммы (B + S)
+            # 5. Trigger 3: Сумма (B + S)
             trigger_sum = (avg_brightness + avg_saturation) > config.MIN_SUM_TRIGGER
             
-            # Итоговое условие: пол должен быть валидным И (сработал любой из триггеров)
-            is_match = is_valid_floor and (trigger_sat or trigger_bright or trigger_sum)
+            # ИТОГОВОЕ УСЛОВИЕ:
+            # (Есть пол) И (Есть минимальный цвет) И (Сработал любой триггер)
+            is_match = is_valid_floor and is_valid_global_sat and (trigger_sat or trigger_bright or trigger_sum)
             
             # Логирование
             if config.DEBUG_MODE:
@@ -77,13 +82,17 @@ def scan_inventory_batch():
                     if trigger_sat:
                         reason = f"SAT>{config.MIN_SATURATION_TRIGGER}"
                     elif trigger_bright:
-                        reason = f"LUMA>{config.MIN_BRIGHTNESS_TRIGGER}&S>{config.MIN_SATURATION_FOR_BRIGHT_TRIGGER}"
+                        reason = f"LUMA>{config.MIN_BRIGHTNESS_TRIGGER}"
                     else:
-                        reason = f"SUM(B+S)>{config.MIN_SUM_TRIGGER}" # Новый вывод причины
+                        reason = f"SUM>{config.MIN_SUM_TRIGGER}"
                     
                     status_text = f"{Fore.GREEN}MATCH [{reason}]{Style.RESET_ALL}"
                 else:
-                    status_text = f"{Fore.RED}SKIP{Style.RESET_ALL}"
+                    # Для отладки покажем, почему пропуск
+                    if is_valid_floor and not is_valid_global_sat:
+                         status_text = f"{Fore.RED}SKIP [LOW SAT]{Style.RESET_ALL}"
+                    else:
+                         status_text = f"{Fore.RED}SKIP{Style.RESET_ALL}"
                 
                 print(f"Slot {i}: B={avg_brightness:5.1f} | S={avg_saturation:5.1f} | Sum={avg_brightness+avg_saturation:5.1f} -> {status_text}")
             
@@ -94,10 +103,13 @@ def scan_inventory_batch():
                 local_x = x - min_x
                 local_y = y - min_y
                 color = (0, 255, 0) if is_match else (0, 0, 255)
+                # Если пропуск из-за насыщенности (при высокой яркости), рисуем оранжевым
+                if not is_match and is_valid_floor and not is_valid_global_sat:
+                    color = (0, 165, 255) # Orange-ish BGR
+
                 cv2.rectangle(debug_img, (local_x - half_size, local_y - half_size), (local_x + half_size, local_y + half_size), color, 2)
                 cv2.putText(debug_img, f"B:{int(avg_brightness)}", (local_x - 18, local_y - 18), cv2.FONT_HERSHEY_SIMPLEX, 0.35, (255, 255, 255), 1)
                 cv2.putText(debug_img, f"S:{int(avg_saturation)}", (local_x - 18, local_y - 6), cv2.FONT_HERSHEY_SIMPLEX, 0.35, (255, 255, 255), 1)
-                # Добавим вывод суммы на скриншот для удобства отладки
                 cv2.putText(debug_img, f"+:{int(avg_brightness+avg_saturation)}", (local_x - 18, local_y + 6), cv2.FONT_HERSHEY_SIMPLEX, 0.35, (200, 255, 255), 1)
 
         if config.SAVE_DEBUG_SCREENSHOTS and debug_img is not None:

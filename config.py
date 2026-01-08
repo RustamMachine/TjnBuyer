@@ -4,7 +4,7 @@
 
 # === SYSTEM & DEBUG ===
 DEBUG_MODE = True
-SAVE_DEBUG_SCREENSHOTS = True
+SAVE_DEBUG_SCREENSHOTS = False
 DEBUG_SCREENSHOT_PATH = r"C:\TujenScreen"
 
 # === КООРДИНАТЫ (X, Y) ===
@@ -27,12 +27,16 @@ REROLL_COLOR_TOLERANCE = 15
 # Если насыщенность высокая, берем не глядя на яркость.
 MIN_SATURATION_TRIGGER = 20.0
 
-# Trigger 2: ЯРКОСТЬ (Для белой валюты)
-# Теперь это КОМБИНИРОВАННЫЙ триггер.
-# Предмет должен быть Ярким (B > 58) ...
-MIN_BRIGHTNESS_TRIGGER = 58.0
-# ... И при этом иметь хоть какой-то цвет (S > 6), чтобы не путать с бликами.
+# ГЛОБАЛЬНЫЙ ФИЛЬТР НАСЫЩЕННОСТИ
+# (Ранее MIN_SATURATION_FOR_BRIGHT_TRIGGER)
+# Минимальная насыщенность для ЛЮБОГО срабатывания. 
+# Если S < 8.0, предмет считается бликом и игнорируется, 
+# даже если проходит по сумме или яркости.
 MIN_SATURATION_FOR_BRIGHT_TRIGGER = 8.0
+
+# Trigger 2: ЯРКОСТЬ (Для белой валюты)
+# Предмет должен быть ярче этого значения.
+MIN_BRIGHTNESS_TRIGGER = 58.0
 
 # Trigger 3: СУММА (Финальная проверка)
 # Если предыдущие проверки не прошли, проверяем общую сумму яркости и насыщенности.
@@ -45,7 +49,7 @@ MIN_ABSOLUTE_BRIGHTNESS = 11.0
 # === TIMINGS & MOUSE (TURBO) ===
 TIME_CLICK_HOLD = (0.05, 0.01)     
 TIME_BETWEEN_ACTIONS = (0.06, 0.02) 
-TIME_REROLL_ANIMATION = 0.45
+TIME_REROLL_ANIMATION = 0.35
 DELAY_POPUP_OPEN = 0.15   
 DELAY_AFTER_TAKE = 0.15   
 
