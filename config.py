@@ -32,11 +32,11 @@ MIN_SATURATION_TRIGGER = 20.0
 # Предмет должен быть Ярким (B > 58) ...
 MIN_BRIGHTNESS_TRIGGER = 58.0
 # ... И при этом иметь хоть какой-то цвет (S > 6), чтобы не путать с бликами.
-MIN_SATURATION_FOR_BRIGHT_TRIGGER = 6.0
+MIN_SATURATION_FOR_BRIGHT_TRIGGER = 8.0
 
 # Trigger 3: СУММА (Финальная проверка)
 # Если предыдущие проверки не прошли, проверяем общую сумму яркости и насыщенности.
-MIN_SUM_TRIGGER = 55.0
+MIN_SUM_TRIGGER = 60.0
 
 # Trigger 4: ПОЛ (Защита от пустоты)
 MIN_ABSOLUTE_BRIGHTNESS = 11.0
