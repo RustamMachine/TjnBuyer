@@ -22,7 +22,7 @@ def is_reroll_active():
 
 def scan_inventory_batch():
     if config.DEBUG_MODE:
-        print(f"\n{Fore.CYAN}--- SCAN START (V8 Guarded) ---{Style.RESET_ALL}")
+        print(f"\n{Fore.CYAN}--- SCAN START (V8 Guarded + Sum Check) ---{Style.RESET_ALL}")
     
     found_items = []
     half_size = config.ANALYSIS_BOX_SIZE // 2
@@ -65,17 +65,27 @@ def scan_inventory_batch():
             trigger_bright = (avg_brightness > config.MIN_BRIGHTNESS_TRIGGER) and \
                              (avg_saturation > config.MIN_SATURATION_FOR_BRIGHT_TRIGGER)
             
-            is_match = is_valid_floor and (trigger_sat or trigger_bright)
+            # 4. Trigger 3: Финальная проверка суммы (B + S)
+            trigger_sum = (avg_brightness + avg_saturation) > config.MIN_SUM_TRIGGER
+            
+            # Итоговое условие: пол должен быть валидным И (сработал любой из триггеров)
+            is_match = is_valid_floor and (trigger_sat or trigger_bright or trigger_sum)
             
             # Логирование
             if config.DEBUG_MODE:
                 if is_match:
-                    reason = f"SAT>{config.MIN_SATURATION_TRIGGER}" if trigger_sat else f"LUMA>{config.MIN_BRIGHTNESS_TRIGGER}&S>{config.MIN_SATURATION_FOR_BRIGHT_TRIGGER}"
+                    if trigger_sat:
+                        reason = f"SAT>{config.MIN_SATURATION_TRIGGER}"
+                    elif trigger_bright:
+                        reason = f"LUMA>{config.MIN_BRIGHTNESS_TRIGGER}&S>{config.MIN_SATURATION_FOR_BRIGHT_TRIGGER}"
+                    else:
+                        reason = f"SUM(B+S)>{config.MIN_SUM_TRIGGER}" # Новый вывод причины
+                    
                     status_text = f"{Fore.GREEN}MATCH [{reason}]{Style.RESET_ALL}"
                 else:
                     status_text = f"{Fore.RED}SKIP{Style.RESET_ALL}"
                 
-                print(f"Slot {i}: B={avg_brightness:5.1f} | S={avg_saturation:5.1f} -> {status_text}")
+                print(f"Slot {i}: B={avg_brightness:5.1f} | S={avg_saturation:5.1f} | Sum={avg_brightness+avg_saturation:5.1f} -> {status_text}")
             
             if is_match:
                 found_items.append(slot_coords)
@@ -87,6 +97,8 @@ def scan_inventory_batch():
                 cv2.rectangle(debug_img, (local_x - half_size, local_y - half_size), (local_x + half_size, local_y + half_size), color, 2)
                 cv2.putText(debug_img, f"B:{int(avg_brightness)}", (local_x - 18, local_y - 18), cv2.FONT_HERSHEY_SIMPLEX, 0.35, (255, 255, 255), 1)
                 cv2.putText(debug_img, f"S:{int(avg_saturation)}", (local_x - 18, local_y - 6), cv2.FONT_HERSHEY_SIMPLEX, 0.35, (255, 255, 255), 1)
+                # Добавим вывод суммы на скриншот для удобства отладки
+                cv2.putText(debug_img, f"+:{int(avg_brightness+avg_saturation)}", (local_x - 18, local_y + 6), cv2.FONT_HERSHEY_SIMPLEX, 0.35, (200, 255, 255), 1)
 
         if config.SAVE_DEBUG_SCREENSHOTS and debug_img is not None:
             if not os.path.exists(config.DEBUG_SCREENSHOT_PATH):
