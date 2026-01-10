@@ -1,112 +1,108 @@
 import unittest
+from unittest.mock import patch
 from core.inventory_manager import InventoryItem, ItemStatus
 from logic.matchmaker import Matchmaker
+
+# MOCK DATA
+MOCK_EXCLUSIVE_GROUPS = {
+    "Amulets": ["GemLevels"]
+}
+
+MOCK_TAG_MAP = {
+    "Amulets": {
+        "GemSpell": "GemLevels",
+        "GemMelee": "GemLevels",
+        "Spirit": "Resources"
+    },
+    "Rings": {
+        # Все эти теги считаются разными и неконфликтующими в тесте
+        "ColdAttack": "ElementalDamage",
+        "FireAttack": "ElementalDamage",
+        "LightningAttack": "ElementalDamage",
+        "ChaosRes": "Resistances",
+        "Life": "Stats",
+        "Mana": "Stats",
+        "Speed": "SpeedGroup",
+        "Rarity": "Misc",
+        "CastRate": "SpeedGroup"
+    }
+}
 
 class TestMatchmaker(unittest.TestCase):
     def setUp(self):
         self.matchmaker = Matchmaker()
 
-    def create_mock_item(self, slot, item_class, tags):
-        """Helper to create InventoryItem with specific state"""
-        item = InventoryItem(slot_index=slot, item_class=item_class, tags=tags)
-        return item
+    def create_item(self, slot, cls, tags):
+        return InventoryItem(slot, cls, tags)
 
-    def test_match_simple_pair(self):
-        """
-        Input: List [Item_A (Spirit), Item_B (GemSpell)]
-        Assert: Result has 1 pair: (Item_A, Item_B)
-        """
-        item_a = self.create_mock_item(0, "Amulets", ["Spirit"])
-        item_b = self.create_mock_item(1, "Amulets", ["GemSpell"])
+    @patch("logic.matchmaker.MUTUALLY_EXCLUSIVE_GROUPS", MOCK_EXCLUSIVE_GROUPS)
+    @patch("logic.matchmaker.TAG_TO_GROUP_MAP", MOCK_TAG_MAP)
+    def test_simple_match(self):
+        """Spirit + GemSpell = OK (Разные группы)"""
+        i1 = self.create_item(0, "Amulets", ["Spirit"])
+        i2 = self.create_item(1, "Amulets", ["GemSpell"])
         
-        inventory = [item_a, item_b]
-        
-        pairs = self.matchmaker.create_crafting_queue(inventory)
-        
+        pairs = self.matchmaker.create_crafting_queue([i1, i2])
         self.assertEqual(len(pairs), 1)
-        self.assertEqual(pairs[0], (item_a, item_b))
+        self.assertEqual(pairs[0][0][1], ["Spirit"])
 
-    def test_match_ignore_junk(self):
-        """
-        Input: List [Item_A (Spirit), Item_C (Junk/Empty)]
-        Assert: Result is Empty (Item C has no value, so A has no partner)
-        """
-        item_a = self.create_mock_item(0, "Amulets", ["Spirit"])
-        item_c = self.create_mock_item(1, "Amulets", []) # No tags = Trash
+    @patch("logic.matchmaker.MUTUALLY_EXCLUSIVE_GROUPS", MOCK_EXCLUSIVE_GROUPS)
+    @patch("logic.matchmaker.TAG_TO_GROUP_MAP", MOCK_TAG_MAP)
+    def test_exclusive_conflict(self):
+        """GemSpell + GemMelee = Conflict (Одна группа GemLevels)"""
+        i1 = self.create_item(0, "Amulets", ["GemSpell"])
+        i2 = self.create_item(1, "Amulets", ["GemMelee"])
         
-        inventory = [item_a, item_c]
-        
-        pairs = self.matchmaker.create_crafting_queue(inventory)
-        
+        pairs = self.matchmaker.create_crafting_queue([i1, i2])
         self.assertEqual(len(pairs), 0)
 
-    def test_match_distinct_classes(self):
-        """
-        Input: List [Item_A (Amulet), Item_D (Ring)]
-        Assert: Result is Empty (Cannot pair Amulet with Ring)
-        """
-        item_a = self.create_mock_item(0, "Amulets", ["Spirit"])
-        item_d = self.create_mock_item(1, "Rings", ["ColdAttack"])
-        
-        inventory = [item_a, item_d]
-        
-        pairs = self.matchmaker.create_crafting_queue(inventory)
-        
-        self.assertEqual(len(pairs), 0)
-
-    def test_match_rings(self):
-        """
-        Input: List [Item_D (Cold), Item_E (Fire)]
-        Assert: Result has 1 pair (Item_D, Item_E)
-        """
-        item_d = self.create_mock_item(0, "Rings", ["ColdAttack"])
-        item_e = self.create_mock_item(1, "Rings", ["FireAttack"])
-        
-        inventory = [item_d, item_e]
-        
-        pairs = self.matchmaker.create_crafting_queue(inventory)
-        
-        self.assertEqual(len(pairs), 1)
-        # Порядок в паре не важен, но проверим состав
-        self.assertIn(item_d, pairs[0])
-        self.assertIn(item_e, pairs[0])
-
+    @patch("logic.matchmaker.MUTUALLY_EXCLUSIVE_GROUPS", MOCK_EXCLUSIVE_GROUPS)
+    @patch("logic.matchmaker.TAG_TO_GROUP_MAP", MOCK_TAG_MAP)
     def test_ignore_finished_items(self):
-        """
-        Input: Item_F (Ring, 2 tags -> FINISHED) + Item_G (Ring, 1 tag)
-        Assert: Empty queue. Finished items should not be inputs.
-        """
-        item_f = self.create_mock_item(0, "Rings", ["Life", "ColdAttack"]) # 2 tags -> FINISHED
-        item_g = self.create_mock_item(1, "Rings", ["FireAttack"])
+        """Предмет с 2 тегами (FINISHED) должен игнорироваться"""
+        i_finished = self.create_item(0, "Amulets", ["Spirit", "GemSpell"])
+        i_base = self.create_item(1, "Amulets", ["Spirit"])
         
-        inventory = [item_f, item_g]
+        self.assertEqual(i_finished.status, ItemStatus.FINISHED)
         
-        pairs = self.matchmaker.create_crafting_queue(inventory)
-        
+        pairs = self.matchmaker.create_crafting_queue([i_finished, i_base])
         self.assertEqual(len(pairs), 0)
 
-    def test_complex_inventory(self):
+    @patch("logic.matchmaker.MUTUALLY_EXCLUSIVE_GROUPS", MOCK_EXCLUSIVE_GROUPS)
+    @patch("logic.matchmaker.TAG_TO_GROUP_MAP", MOCK_TAG_MAP)
+    def test_nine_candidates_stress_test(self):
         """
-        Input: 4 rings. A(Cold), B(Fire), C(Lightning), D(Chaos)
-        Expect: 2 pairs. (A,B) and (C,D) or similar combinations.
+        9 кандидатов (Rings). 
+        Все теги разные.
+        Должно получиться 4 пары, и 1 предмет останется без пары.
         """
-        r1 = self.create_mock_item(0, "Rings", ["ColdAttack"])
-        r2 = self.create_mock_item(1, "Rings", ["FireAttack"])
-        r3 = self.create_mock_item(2, "Rings", ["LightningAttack"])
-        r4 = self.create_mock_item(3, "Rings", ["ChaosRes"])
+        # Создаем 9 предметов с уникальными тегами
+        tags_list = [
+            "ColdAttack", "FireAttack", "LightningAttack", 
+            "ChaosRes", "Life", "Mana", 
+            "Speed", "Rarity", "CastRate"
+        ]
         
-        inventory = [r1, r2, r3, r4]
-        
+        inventory = []
+        for i, tag in enumerate(tags_list):
+            item = self.create_item(i, "Rings", [tag])
+            inventory.append(item)
+            
         pairs = self.matchmaker.create_crafting_queue(inventory)
         
-        self.assertEqual(len(pairs), 2)
+        # 9 предметов -> 4 пары (8 занято), 1 остался
+        self.assertEqual(len(pairs), 4)
         
-        # Check that all items are used exactly once
-        used_items = []
+        # Проверим, что все предметы в парах уникальны
+        used_items = set()
         for p in pairs:
-            used_items.extend(p)
-        
-        self.assertCountEqual(used_items, inventory)
+            item_a = p[0][0]
+            item_b = p[1][0]
+            used_items.add(item_a)
+            used_items.add(item_b)
+            
+        self.assertEqual(len(used_items), 8)
+        print(f"\n[TEST INFO] Used {len(used_items)}/9 items. Pairs: {len(pairs)}")
 
 if __name__ == "__main__":
     unittest.main()

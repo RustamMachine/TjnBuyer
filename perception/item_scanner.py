@@ -1,4 +1,5 @@
 import re
+from typing import Optional
 from core.inventory_manager import InventoryItem, InventoryManager
 from config.mods_config import WANTED_MODS_BY_CLASS
 
@@ -6,59 +7,50 @@ class ItemScanner:
     def __init__(self, manager: InventoryManager):
         self.manager = manager
 
-    def _parse_text_poe2(self, raw_text: str, slot_index: int) -> InventoryItem:
-        print(f"\n--- [DEBUG] Анализ предмета в слоте {slot_index} ---")
-        lines = [line.strip() for line in raw_text.split('\n') if line.strip()]
-        
+    def _parse_text_poe2(self, raw_text: str, slot_index: int) -> Optional[InventoryItem]:
         # 1. Определяем класс предмета
+        lines = [line.strip() for line in raw_text.split('\n') if line.strip()]
         item_class = None
+        
         for line in lines:
             if line.startswith("Item Class:"):
                 item_class = line.split(":")[1].strip()
-                print(f"   [DEBUG] Найден класс: '{item_class}'")
                 break
         
+        # Если класс не в конфиге - это мусор
         if not item_class or item_class not in WANTED_MODS_BY_CLASS:
-            print(f"   [DEBUG] Класс '{item_class}' нас не интересует -> SKIP")
-            return None
+            return None # Или вернуть InventoryItem со статусом TRASH
 
-        # 2. Ищем Т1 моды
+        # 2. Ищем Т1 моды согласно конфигу
         found_tags = []
         rules = WANTED_MODS_BY_CLASS[item_class]
 
         for i, line in enumerate(lines):
-            # Ищем строку с Tier: 1
+            # Парсим только Tier 1
             if "(Tier: 1)" in line and line.startswith("{") and line.endswith("}"):
-                print(f"   [DEBUG] Нашел Т1 аффикс в строке: {line}")
-                
-                # Проверяем следующую строку на наличие полезных свойств
                 if i + 1 < len(lines):
-                    next_line = lines[i + 1]
-                    print(f"      -> Смотрю описание мода: '{next_line}'")
+                    mod_text = lines[i + 1]
                     
-                    # Проверяем правила из конфига
-                    for pattern, tag in rules.items():
-                        if isinstance(tag, dict):
-                            # Вложенный поиск (например, для урона)
-                            for sub_pattern, sub_tag in tag.items():
-                                if sub_pattern in next_line:
-                                    print(f"         !!! СОВПАДЕНИЕ: '{sub_pattern}' -> Тег: {sub_tag}")
-                                    found_tags.append(sub_tag)
-                        else:
-                            # Простой поиск подстроки
-                            if pattern in next_line:
-                                print(f"         !!! СОВПАДЕНИЕ: '{pattern}' -> Тег: {tag}")
+                    # Бежим по группам правил (Damage, Resources и т.д.)
+                    for group_name, mappings in rules.items():
+                        for substring, tag in mappings.items():
+                            if substring in mod_text:
                                 found_tags.append(tag)
+                                # Нашли совпадение для этой строки - идем к следующей строке текста
+                                break 
 
-        # Убираем дубликаты
+        # Убираем дубликаты (на всякий случай)
         found_tags = list(set(found_tags))
-        print(f"   [DEBUG] Итоговые теги: {found_tags}")
 
-        if not found_tags:
-            print("   [DEBUG] Полезных тегов нет -> TRASH")
-            return None
-
-        print("   [DEBUG] Предмет принят!")
+        # Создаем предмет. InventoryItem сам выставит статус (TRASH/CRAFT_BASE/FINISHED)
         return InventoryItem(slot_index, item_class, found_tags)
 
-
+    # Метод для вызова из бота (пример)
+    def scan_slot_text(self, text: str, slot_index: int):
+        item = self._parse_text_poe2(text, slot_index)
+        if item:
+            self.manager.update_slot(slot_index, item)
+        else:
+            # Если item None, значит класс не подошел или еще что-то
+            # Можно создать пустой/мусорный итем
+            self.manager.update_slot(slot_index, InventoryItem(slot_index, "Unknown", []))
