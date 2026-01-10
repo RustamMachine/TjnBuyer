@@ -216,9 +216,9 @@ Result: Ждать анимацию. Проверить слот результ�
 
 
 
-Fixture: Папка tests/fixtures/screenshots/. В ней лежат файлы: recomb_ring_life_fire.png, recomb_empty.png.
+Fixture: Папка tests/fixtures/screenshots/. В ней лежат папки amulets / rings, со скриншотами
 
-Test Case 1: test_find_exact_match
+Test Case 1: распознавание текста с предмета А, и предмета Б
 
 Загружает recomb_ring_life_fire.png.
 
@@ -236,21 +236,7 @@ Assert: Должен найти.
 
 2. Тесты Парсера (tests/test_parser.py)
 
-Fixture: Файл tests/fixtures/items.txt. Содержит сырой текст от Ctrl+Alt+C для 10 разных предметов, разделенных разделителем.
-
-Test Case:
-
-Считать текст.
-
-Прогнать через item_scanner._parse_text.
-
-Assert:
-
-Item 1 -> Class: Rings, Tags: ['Life'] (T1 обнаружен).
-
-Item 2 -> Class: Amulets, Tags: ['Spirit', 'AllSpells'].
-
-Item 3 (Мусор) -> Tags: [].
+в test_parser.md
 
 3. Тесты Матчмейкера (tests/test_matchmaker.py)
 
