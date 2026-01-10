@@ -1,22 +1,35 @@
+# mods_config.py
+
 # Словарь соответствия текстов модов и внутренних тегов
-# Формат: "Подстрока в PoE2": "Внутренний тег"
+# Структура:
+# "ItemClass": {
+#     "Human Readable Group Name (Optional/Comment)": {
+#         "Exact Substring in PoE2 Item Text": "InternalTag"
+#     }
+# }
 
 WANTED_MODS_BY_CLASS = {
     "Rings": {
-        "Adds": { # Для урона обычно ищем стихию + Attack
+        "ElementalDamage": {
             "Cold damage to Attacks": "ColdAttack",
             "Lightning damage to Attacks": "LightningAttack",
             "Fire damage to Attacks": "FireAttack",
         },
-        "maximum Life": "Life",
-        "maximum Spirit": "Spirit",
-        "to Fire and Chaos Resistances": "FireChaosRes",
-        "increased Mana Regeneration Rate": "ManaRegen",
+        "Attributes": {
+             # Можно добавить позже
+        }
     },
     "Amulets": {
-        "maximum Spirit": "Spirit",
-        "to Spirit": "Spirit",
-        "maximum Life": "Life",
-        # Добавь другие моды по мере необходимости
+        "Resources": {
+            # В PoE2 это обычно "+X to Spirit"
+            "to Spirit": "Spirit" 
+        },
+        "GemLevels": {
+            # Важные +N к уровню камней
+            "Level of all Minion Skills": "GemMinion",
+            "Level of all Spell Skills": "GemSpell",
+            "Level of all Melee Skills": "GemMelee",
+            "Level of all Projectile Skills": "GemProjectile"
+        }
     }
 }
