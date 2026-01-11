@@ -3,7 +3,7 @@ import numpy as np
 import cv2
 import os
 import time
-import config
+import config.config as config
 from colorama import Fore, Style
 
 def get_pixel_color(coords):
@@ -123,3 +123,60 @@ def scan_inventory_batch():
         print(f"{Fore.CYAN}--- SCAN END ---\n{Style.RESET_ALL}")
         
     return found_items
+
+
+def get_occupied_inventory_slots():
+    """
+    Делает один скриншот инвентаря и возвращает список индексов слотов (0-59),
+    в которых лежат предметы (яркость > порога).
+    Это позволяет не кликать Ctrl+C по пустым клеткам.
+    """
+    occupied_indices = []
+    
+    # Размеры анализа (чуть меньше, чем для Туджина, чтобы не цеплять рамки)
+    box_size = 20 
+    half = box_size // 2
+    
+    # Определяем границы для захвата области инвентаря одним куском (оптимизация)
+    # Берем min/max из сетки
+    xs = [p[0] for p in config.PLAYER_INVENTORY_GRID]
+    ys = [p[1] for p in config.PLAYER_INVENTORY_GRID]
+    
+    min_x, max_x = min(xs) - 20, max(xs) + 20
+    min_y, max_y = min(ys) - 20, max(ys) + 20
+    
+    monitor = {
+        "left": min_x, 
+        "top": min_y, 
+        "width": max_x - min_x, 
+        "height": max_y - min_y
+    }
+    
+    with mss.mss() as sct:
+        # Делаем 1 большой скриншот области инвентаря
+        sct_img = sct.grab(monitor)
+        img_np = np.array(sct_img)
+        
+        # Проходим по нашей виртуальной сетке
+        for i, (gx, gy) in enumerate(config.PLAYER_INVENTORY_GRID):
+            # Переводим глобальные координаты в локальные (относительно скриншота)
+            lx = gx - min_x
+            ly = gy - min_y
+            
+            # Вырезаем кусочек
+            # Проверка границ на всякий случай
+            if lx - half < 0 or ly - half < 0: continue
+            
+            slot_crop = img_np[ly-half : ly+half, lx-half : lx+half]
+            
+            # Считаем среднюю яркость (B+G+R) / 3
+            # sct возвращает BGRA, берем первые 3 канала
+            avg_brightness = np.mean(slot_crop[:, :, :3])
+            
+            if avg_brightness > config.MIN_INVENTORY_SLOT_BRIGHTNESS:
+                occupied_indices.append(i)
+                
+    if config.DEBUG_MODE:
+        print(f"[VISION] Found {len(occupied_indices)} items in inventory.")
+        
+    return occupied_indices
