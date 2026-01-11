@@ -60,3 +60,13 @@ TIME_THINKING = (0.8, 0.3)
 
 MOUSE_SPEED_FACTOR = 0.12  
 MOUSE_DRIFT_RADIUS = 10
+
+
+# === RECOMBINATOR SETTINGS ===
+# Координаты областей, где отображаются списки модов (ROI - Region of Interest)
+# Формат: (Left, Top, Right, Bottom)
+RECOMB_ITEM_A_ROI = (65, 209, 821, 563)   # Левая панель
+RECOMB_ITEM_B_ROI = (1301, 209, 2040, 563) # Правая панель
+
+# Координата кнопки "Combine" (примерная, нужно будет уточнить калибровкой)
+RECOMB_BTN_COMBINE_COORDS = (992, 546, 1136, 572) # Заглушка, уточним позже
