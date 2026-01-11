@@ -1,4 +1,6 @@
-# config/mods_config.py
+"""
+Конфигурация модов для парсинга и поиска (OCR).
+"""
 
 # 1. СЛОВАРЬ ЦЕННЫХ МОДОВ
 # Структура: "ItemClass": { "GroupName": { "Substring": "InternalTag" } }
@@ -15,7 +17,29 @@ WANTED_MODS_BY_CLASS = {
     },
     "Amulets": {
         "Resources": {
-            "to Spirit": "Spirit" 
+            # ИЗМЕНЕНИЕ: Заменили "to Spirit" на конкретные значения T1 (45-65),
+            # чтобы OCR не путал их с implicit (+11-20).
+            "45 to Spirit": "Spirit",
+            "46 to Spirit": "Spirit",
+            "47 to Spirit": "Spirit",
+            "48 to Spirit": "Spirit",
+            "49 to Spirit": "Spirit",
+            "50 to Spirit": "Spirit",
+            "51 to Spirit": "Spirit",
+            "52 to Spirit": "Spirit",
+            "53 to Spirit": "Spirit",
+            "54 to Spirit": "Spirit",
+            "55 to Spirit": "Spirit",
+            "56 to Spirit": "Spirit",
+            "57 to Spirit": "Spirit",
+            "58 to Spirit": "Spirit",
+            "59 to Spirit": "Spirit",
+            "60 to Spirit": "Spirit",
+            "61 to Spirit": "Spirit",
+            "62 to Spirit": "Spirit",
+            "63 to Spirit": "Spirit",
+            "64 to Spirit": "Spirit",
+            "65 to Spirit": "Spirit",
         },
         "GemLevels": {
             "Level of all Minion Skills": "GemMinion",

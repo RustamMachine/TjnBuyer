@@ -1,12 +1,11 @@
 from typing import List, Tuple, Set, Dict
 from core.inventory_manager import InventoryItem, ItemStatus
 from config.mods_config import MUTUALLY_EXCLUSIVE_GROUPS, TAG_TO_GROUP_MAP
+import config.config as config
 from colorama import Fore, Style, init
 
 init(autoreset=True)
 
-# Типы данных для читаемости
-# (Предмет, Список тегов для выбора в рекомбинаторе)
 CraftingParticipant = Tuple[InventoryItem, List[str]]
 CraftingPair = Tuple[CraftingParticipant, CraftingParticipant]
 
@@ -14,33 +13,34 @@ class Matchmaker:
     def create_crafting_queue(self, inventory: List[InventoryItem]) -> List[CraftingPair]:
         """
         Logic:
-        1. Takes CRAFT_BASE items.
+        1. Takes CRAFT_BASE items (single mod items).
         2. Pairs them if:
-           - Tags are different (set intersection check).
+           - Tags are COMPLETELY DIFFERENT (sets are disjoint).
            - Tags are NOT in the same Mutually Exclusive Group.
         """
-        print(f"\n{Fore.CYAN}=== MATCHMAKER (Logic Only) ==={Style.RESET_ALL}")
+        if config.DETAILED_LOGGING:
+            print(f"\n{Fore.CYAN}=== MATCHMAKER ==={Style.RESET_ALL}")
         
         pairs: List[CraftingPair] = []
         
-        # 1. Filter Candidates (Only CRAFT_BASE)
-        # Мы доверяем сканеру: если статус BASE, значит там есть 1+ валидный тег.
+        # Берем только CRAFT_BASE (предметы с 1 модом)
         candidates = [item for item in inventory if item.status == ItemStatus.CRAFT_BASE]
         
-        print(f"Candidates: {len(candidates)}")
+        if config.DETAILED_LOGGING:
+            print(f"Candidates (CRAFT_BASE): {len(candidates)}")
 
-        # 2. Group by Class
+        # Группируем по классу (Amulet, Ring и т.д.)
         grouped_items = {}
         for item in candidates:
             if item.item_class not in grouped_items:
                 grouped_items[item.item_class] = []
             grouped_items[item.item_class].append(item)
             
-        # 3. Create Pairs
+        # Создаем пары
         for item_class, items in grouped_items.items():
-            print(f"\nClass: {Fore.BLUE}{item_class}{Style.RESET_ALL} ({len(items)})")
+            if config.DETAILED_LOGGING:
+                print(f"Class: {Fore.BLUE}{item_class}{Style.RESET_ALL} ({len(items)})")
             
-            # Получаем настройки конфликтов для этого класса
             exclusive_groups = MUTUALLY_EXCLUSIVE_GROUPS.get(item_class, [])
             tag_map = TAG_TO_GROUP_MAP.get(item_class, {})
             
@@ -53,7 +53,9 @@ class Matchmaker:
                 item_a = items[i]
                 tags_a = set(item_a.tags)
                 
-                print(f"   A (Slot {item_a.slot_index}): {list(tags_a)}")
+                if config.DETAILED_LOGGING:
+                    print(f"   Slot {item_a.slot_index} [{', '.join(tags_a)}] looking for partner...")
+                
                 best_match_idx = -1
                 
                 for j in range(i + 1, len(items)):
@@ -63,13 +65,17 @@ class Matchmaker:
                     item_b = items[j]
                     tags_b = set(item_b.tags)
                     
-                    # --- ПРОВЕРКА 1: Разнообразие ---
-                    # Если теги одинаковые (например Spirit + Spirit), скрещивать бессмысленно (обычно)
-                    if tags_a == tags_b:
+                    # 1. ПРОВЕРКА НА ПЕРЕСЕЧЕНИЕ (НОВОЕ)
+                    # Если есть хоть один общий тег (например Spirit и Spirit) - пропускаем.
+                    # Мы хотим крафтить {A} + {B} -> {A, B}.
+                    # А не {A} + {A} -> {A}.
+                    if not tags_a.isdisjoint(tags_b):
+                        # if config.DETAILED_LOGGING:
+                        #     print(f"      -> Skip Slot {item_b.slot_index}: Overlapping tags")
                         continue
 
-                    # --- ПРОВЕРКА 2: Конфликты (Exclusive Groups) ---
-                    # Нельзя скрещивать, если теги принадлежат одной запрещенной группе
+                    # 2. Проверка на группы исключений (Exclusive Groups)
+                    # Например, нельзя скрестить Mana и Life, если они в одной группе.
                     has_conflict = False
                     for t_a in tags_a:
                         for t_b in tags_b:
@@ -82,28 +88,27 @@ class Matchmaker:
                             break
                             
                     if has_conflict:
-                        print(f"      -> Skip B (Slot {item_b.slot_index}): Exclusive Group Conflict")
+                        if config.DETAILED_LOGGING:
+                            print(f"      -> Skip Slot {item_b.slot_index}: Exclusive Group Conflict")
                         continue
 
-                    # --- УСПЕХ ---
-                    # Если мы здесь, пара валидна.
-                    # В этой версии берем первого подходящего (Greedy strategy)
-                    print(f"      -> {Fore.GREEN}MATCH{Style.RESET_ALL} with B (Slot {item_b.slot_index}): {list(tags_b)}")
+                    # УСПЕХ
+                    if config.DETAILED_LOGGING:
+                        print(f"      -> {Fore.GREEN}MATCH{Style.RESET_ALL} with Slot {item_b.slot_index} [{', '.join(tags_b)}]")
+                    
                     best_match_idx = j
                     break
                 
                 if best_match_idx != -1:
                     item_b = items[best_match_idx]
-                    
-                    # Формируем результат с явным указанием тегов для кликера
                     part_a = (item_a, item_a.tags)
                     part_b = (item_b, item_b.tags)
-                    
                     pairs.append((part_a, part_b))
                     used_indices.add(i)
                     used_indices.add(best_match_idx)
                 else:
-                    print(f"      -> No partner.")
+                    if config.DETAILED_LOGGING:
+                        print(f"      -> No valid partner found.")
 
         print(f"Pairs created: {len(pairs)}")
         return pairs

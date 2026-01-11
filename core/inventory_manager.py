@@ -1,74 +1,79 @@
-from typing import List, Optional, Dict
 from enum import Enum
+import threading
 
-class ItemStatus(Enum):
-    EMPTY = "EMPTY"        # Слот пуст
-    TRASH = "TRASH"        # Предмет есть, но он мусор
-    CRAFT_BASE = "CRAFT_BASE" # 1 ценный мод (кандидат)
-    FINISHED = "FINISHED"  # 2+ ценных мода (готовый)
-    LOCKED = "LOCKED"      # В процессе использования прямо сейчас
+class ItemStatus(str, Enum):
+    UNKNOWN = "unknown"
+    TRASH = "trash"
+    CRAFT_BASE = "craft_base" # 1 тег - заготовка
+    FINISHED = "finished"     # 2+ тега - результат
+    LOCKED = "locked"
+    OCR_ERROR = "ocr_error"
 
 class InventoryItem:
-    def __init__(self, slot_index: int, item_class: str, tags: List[str]):
+    def __init__(self, slot_index, item_class, tags):
         self.slot_index = slot_index
         self.item_class = item_class
-        self.tags = tags
-        self.status = self._determine_status()
-
-    def _determine_status(self) -> ItemStatus:
-        if not self.tags:
-            return ItemStatus.TRASH
+        self.tags = tags  # Список строк
         
-        # Если 2 и более тегов — считаем предмет готовым.
-        if len(self.tags) >= 2:
-            return ItemStatus.FINISHED
-            
-        return ItemStatus.CRAFT_BASE
+        # Автоматическое определение статуса
+        if not tags:
+            self.status = ItemStatus.TRASH
+        elif len(tags) >= 2:
+            # Если нашли 2 и более нужных модов - считаем предмет готовым/ценным
+            self.status = ItemStatus.FINISHED
+        else:
+            # Если 1 мод - это база для крафта
+            self.status = ItemStatus.CRAFT_BASE
 
     def __repr__(self):
-        return f"Item(slot={self.slot_index}, cls={self.item_class}, tags={self.tags}, status={self.status.value})"
+        return f"Slot{self.slot_index}({self.item_class}, {self.tags}, {self.status})"
 
 class InventoryManager:
     def __init__(self):
-        # Храним состояние всех 60 слотов (0-59). Изначально None.
-        self.items: Dict[int, Optional[InventoryItem]] = {i: None for i in range(60)}
+        self.slots = {}  # index -> InventoryItem
+        self.lock = threading.Lock()
 
-    def update_slot(self, index: int, item_obj: Optional[InventoryItem]):
-        """Обновляет информацию о предмете в слоте."""
-        if 0 <= index < 60:
-            self.items[index] = item_obj
+    def update_slot(self, index, item):
+        with self.lock:
+            self.slots[index] = item
 
-    def remove_item(self, index: int):
-        """Очищает слот (например, предмет забрали в рекомбинатор)."""
-        if 0 <= index < 60:
-            self.items[index] = None
+    def get_item(self, index):
+        with self.lock:
+            return self.slots.get(index)
 
-    def get_item(self, index: int) -> Optional[InventoryItem]:
-        return self.items.get(index)
-        
-    def get_crafting_candidates(self) -> List[InventoryItem]:
-        """Возвращает список предметов, доступных для крафта (Base)."""
-        return [
-            item for item in self.items.values() 
-            if item and item.status == ItemStatus.CRAFT_BASE
-        ]
+    def get_crafting_candidates(self):
+        """Возвращает список предметов, готовых к крафту."""
+        with self.lock:
+            return [
+                item for item in self.slots.values() 
+                if item.status == ItemStatus.CRAFT_BASE
+            ]
 
-    def get_next_empty_slot(self) -> int:
-        """Ищет первый свободный слот (для выгрузки результата). Возвращает -1, если всё занято."""
-        for i in range(60):
-            if self.items[i] is None:
-                return i
-        return -1
+    def lock_item(self, index):
+        with self.lock:
+            if index in self.slots:
+                self.slots[index].status = ItemStatus.LOCKED
 
-    def lock_item(self, index: int):
-        """Помечает предмет как используемый (чтобы не взять его дважды)."""
-        item = self.items.get(index)
-        if item:
-            item.status = ItemStatus.LOCKED
+    def unlock_item(self, index):
+        """
+        Разблокирует предмет.
+        ВАЖНО: Возвращает статус на основе количества тегов, 
+        чтобы случайно не сделать FINISHED предмет снова CRAFT_BASE при ошибке.
+        """
+        with self.lock:
+            if index in self.slots:
+                item = self.slots[index]
+                if len(item.tags) >= 2:
+                    item.status = ItemStatus.FINISHED
+                else:
+                    item.status = ItemStatus.CRAFT_BASE
+    
+    def mark_as_error(self, index):
+        with self.lock:
+            if index in self.slots:
+                self.slots[index].status = ItemStatus.OCR_ERROR
 
-    def unlock_item(self, index: int):
-        """Снимает блокировку (если крафт не состоялся)."""
-        item = self.items.get(index)
-        if item and item.status == ItemStatus.LOCKED:
-            # Пересчитываем статус заново
-            item.status = item._determine_status()
+    def remove_item(self, index):
+        with self.lock:
+            if index in self.slots:
+                del self.slots[index]
